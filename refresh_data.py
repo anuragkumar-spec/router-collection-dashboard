@@ -35,9 +35,28 @@ PANEL_META = [
 ]
 
 
-def run_card(card_id):
+DISP_CLASSES = [
+    'All',
+    'Call Back Requested',
+    'Customer Not Connected',
+    'Failed Pickup Attempt Calling',
+    'Incomplete Call',
+    'Router-Collection',
+    'campaign.system.disposition',
+    'user.forced.logged.off',
+]
+
+
+def run_card(card_id, disposition_class=None):
+    params = []
+    if disposition_class:
+        params.append({
+            'type':   'string/=',
+            'target': ['variable', ['template-tag', 'disposition_class']],
+            'value':  disposition_class,
+        })
     r = requests.post(f'{MB_URL}/api/card/{card_id}/query',
-                      headers=HEADERS, json={}, timeout=30)
+                      headers=HEADERS, json={'parameters': params}, timeout=30)
     r.raise_for_status()
     d = r.json()['data']
     cols = [c['name'] for c in d['cols']]
@@ -57,27 +76,59 @@ def rate_class(r):
 
 
 print('Fetching data from Metabase...')
-data = {}
-for key, cid in CARD_IDS.items():
-    print(f'  {key} (card {cid})')
-    data[key] = run_card(cid)
+
+# Fetch data for All + each disposition class
+all_data = {}   # all_data[disp_class][card_key] = rows
+for dc in DISP_CLASSES:
+    dc_filter = None if dc == 'All' else dc
+    print(f'  [{dc}]')
+    dc_data = {}
+    for key, cid in CARD_IDS.items():
+        print(f'    {key}')
+        dc_data[key] = run_card(cid, dc_filter)
+    all_data[dc] = dc_data
 
 refreshed_at = datetime.now(timezone.utc).strftime('%d %b %Y, %H:%M UTC')
 
-# Build panel summaries
-panels = []
-for key, title, subtitle, conn_key in PANEL_META:
-    rows = data[key]
-    total = sum(r.get('Total', 0) or 0 for r in rows)
-    conn  = sum(r.get(conn_key, 0) or 0 for r in rows)
-    rate  = round(conn * 100 / total, 1) if total else 0
-    panels.append({
-        'key': key, 'title': title, 'subtitle': subtitle,
-        'conn_key': conn_key, 'total': total, 'conn': conn, 'rate': rate,
-        'rows': rows,
-    })
 
-agent_rows = data['agent']
+def build_panels(data):
+    panels = []
+    for key, title, subtitle, conn_key in PANEL_META:
+        rows = data[key]
+        total = sum(r.get('Total', 0) or 0 for r in rows)
+        conn  = sum(r.get(conn_key, 0) or 0 for r in rows)
+        rate  = round(conn * 100 / total, 1) if total else 0
+        panels.append({
+            'key': key, 'title': title, 'subtitle': subtitle,
+            'conn_key': conn_key, 'total': total, 'conn': conn, 'rate': rate,
+            'rows': rows,
+        })
+    return panels
+
+
+# Build panels and trend data per disposition class for JS
+js_datasets = {}
+for dc, data in all_data.items():
+    panels_dc = build_panels(data)
+    for p in panels_dc:
+        p['trend_dates']  = [str(r['Date'])[:10] for r in p['rows']]
+        p['trend_rates']  = [r.get('Connect Rate %', 0) for r in p['rows']]
+        p['trend_totals'] = [r.get('Total', 0) for r in p['rows']]
+    js_datasets[dc] = {
+        'panels': [
+            {k: p[k] for k in ('key','total','conn','rate','conn_key','trend_dates','trend_rates','trend_totals')}
+            for p in panels_dc
+        ],
+        'agent': data['agent'],
+    }
+
+# Default (All) for initial render
+panels    = build_panels(all_data['All'])
+for p in panels:
+    p['trend_dates']  = [str(r['Date'])[:10] for r in p['rows']]
+    p['trend_rates']  = [r.get('Connect Rate %', 0) for r in p['rows']]
+    p['trend_totals'] = [r.get('Total', 0) for r in p['rows']]
+agent_rows = all_data['All']['agent']
 
 # ── Build trend data per panel ───────────────────────────────────────────────
 for p in panels:
@@ -93,13 +144,13 @@ panel_cards_html = ''
 for p in panels:
     rc = rate_class(p['rate'])
     panel_cards_html += f'''
-    <div class="panel">
+    <div class="panel" id="panel_{p["key"]}">
       <div class="panel-title">{p["title"]}</div>
       <div class="panel-subtitle">{p["subtitle"]}</div>
       <div class="panel-rate {rc}">{p["rate"]}%</div>
       <div class="panel-meta">
-        <span><strong>{p["total"]:,}</strong> Total</span>
-        <span><strong>{p["conn"]:,}</strong> {p["conn_key"]}</span>
+        <span><strong class="panel-total">{p["total"]:,}</strong> Total</span>
+        <span><strong class="panel-conn">{p["conn"]:,}</strong> {p["conn_key"]}</span>
       </div>
     </div>'''
 
@@ -156,6 +207,9 @@ html = f'''<!DOCTYPE html>
   }}
   .header h1 {{ font-size: 18px; font-weight: 700; flex: 1; }}
   .badge {{ background: #e94560; color: #fff; font-size: 11px; padding: 3px 10px; border-radius: 12px; font-weight: 600; }}
+  .filter-wrap {{ display: flex; align-items: center; gap: 8px; }}
+  .filter-wrap label {{ font-size: 11px; opacity: .7; white-space: nowrap; }}
+  .filter-wrap select {{ background: #2a2a4a; color: #fff; border: 1px solid #444; border-radius: 6px; padding: 5px 10px; font-size: 12px; cursor: pointer; }}
   .refreshed {{ font-size: 11px; opacity: .6; margin-left: auto; }}
 
   .main {{ padding: 20px 28px; max-width: 1600px; margin: 0 auto; }}
@@ -216,6 +270,12 @@ html = f'''<!DOCTYPE html>
 <div class="header">
   <h1>Connect Rate Dashboard</h1>
   <span class="badge">Router-Collection</span>
+  <div class="filter-wrap">
+    <label for="dcFilter">Disposition Class</label>
+    <select id="dcFilter" onchange="applyFilter()">
+      {''.join(f'<option value="{dc}">{dc}</option>' for dc in DISP_CLASSES)}
+    </select>
+  </div>
   <span class="refreshed">Refreshed: {refreshed_at}</span>
 </div>
 
@@ -255,7 +315,7 @@ html = f'''<!DOCTYPE html>
       <h2>Agent Breakdown</h2>
       <table>
         <thead><tr><th>Agent</th><th>Total</th><th>Connected</th><th>Rate %</th></tr></thead>
-        <tbody>{agent_rows_html}</tbody>
+        <tbody id="agentTbody">{agent_rows_html}</tbody>
       </table>
     </div>
 
@@ -264,7 +324,7 @@ html = f'''<!DOCTYPE html>
 
 <script>
 function makeChart(id, labels, rates, totals) {{
-  new Chart(document.getElementById(id), {{
+  return new Chart(document.getElementById(id), {{
     type: 'line',
     data: {{
       labels,
@@ -302,6 +362,45 @@ function makeChart(id, labels, rates, totals) {{
 }}
 
 CHART_CALLS_PLACEHOLDER
+
+const ALL_DATA = JS_DATASETS_PLACEHOLDER;
+const charts = {{}};
+
+function applyFilter() {{
+  const dc = document.getElementById('dcFilter').value;
+  const d = ALL_DATA[dc];
+
+  // Update metric panels
+  d.panels.forEach(p => {{
+    const el = document.getElementById('panel_' + p.key);
+    if (!el) return;
+    const rc = p.rate >= 40 ? 'rate-high' : p.rate >= 25 ? 'rate-mid' : 'rate-low';
+    el.querySelector('.panel-rate').className = 'panel-rate ' + rc;
+    el.querySelector('.panel-rate').textContent = p.rate + '%';
+    el.querySelector('.panel-total').textContent = p.total.toLocaleString();
+    el.querySelector('.panel-conn').textContent = p.conn.toLocaleString();
+  }});
+
+  // Update charts
+  d.panels.forEach(p => {{
+    const c = charts[p.key];
+    if (!c) return;
+    c.data.labels = p.trend_dates;
+    c.data.datasets[0].data = p.trend_rates;
+    c.data.datasets[1].data = p.trend_totals;
+    c.update();
+  }});
+
+  // Update agent table
+  const tbody = document.getElementById('agentTbody');
+  tbody.innerHTML = d.agent.map(row => {{
+    const r = row['Connect Rate %'] || 0;
+    const rc = r >= 40 ? 'rate-high' : r >= 25 ? 'rate-mid' : 'rate-low';
+    return '<tr><td>' + row.Agent + '</td><td>' + (row.Total||0).toLocaleString() +
+           '</td><td>' + (row.Connected||0).toLocaleString() +
+           '</td><td class="' + rc + '">' + r + '%</td></tr>';
+  }}).join('');
+}}
 </script>
 </body>
 </html>'''
@@ -309,8 +408,8 @@ CHART_CALLS_PLACEHOLDER
 chart_calls_parts = []
 for p in panels:
     chart_calls_parts.append(
-        "makeChart('chart_{}', {}, {}, {});".format(
-            p['key'],
+        "charts['{}'] = makeChart('chart_{}', {}, {}, {});".format(
+            p['key'], p['key'],
             json.dumps(p['trend_dates']),
             json.dumps(p['trend_rates']),
             json.dumps(p['trend_totals'])
@@ -318,6 +417,7 @@ for p in panels:
     )
 chart_calls = '\n'.join(chart_calls_parts)
 html = html.replace('CHART_CALLS_PLACEHOLDER', chart_calls)
+html = html.replace('JS_DATASETS_PLACEHOLDER', json.dumps(js_datasets))
 
 os.makedirs('docs', exist_ok=True)
 with open('docs/index.html', 'w', encoding='utf-8') as f:
