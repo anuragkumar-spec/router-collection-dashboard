@@ -80,7 +80,7 @@ for key, title, subtitle, conn_key in PANEL_META:
 agent_rows = data['agent']
 
 # ── Build trend data from all_calls panel ────────────────────────────────────
-trend_dates  = [r['Date'] for r in data['all_calls']]
+trend_dates  = [str(r['Date'])[:10] for r in data['all_calls']]
 trend_rates  = [r['Connect Rate %'] for r in data['all_calls']]
 trend_totals = [r['Total'] for r in data['all_calls']]
 
@@ -130,7 +130,7 @@ for row in data['all_calls']:
     rc = rate_class(r)
     daily_rows_html += f'''
       <tr>
-        <td>{row["Date"]}</td>
+        <td>{str(row["Date"])[:10]}</td>
         <td>{row["Total"]:,}</td>
         <td>{row["Connected"]:,}</td>
         <td class="{rc}">{r}%</td>
