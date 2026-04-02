@@ -79,10 +79,13 @@ for key, title, subtitle, conn_key in PANEL_META:
 
 agent_rows = data['agent']
 
-# ── Build trend data from all_calls panel ────────────────────────────────────
-trend_dates  = [str(r['Date'])[:10] for r in data['all_calls']]
-trend_rates  = [r['Connect Rate %'] for r in data['all_calls']]
-trend_totals = [r['Total'] for r in data['all_calls']]
+# ── Build trend data per panel ───────────────────────────────────────────────
+for p in panels:
+    rows = p['rows']
+    p['trend_dates']  = [str(r['Date'])[:10] for r in rows]
+    p['trend_rates']  = [r.get('Connect Rate %', 0) for r in rows]
+    p['trend_totals'] = [r.get('Total', 0) for r in rows]
+    p['trend_conn']   = [r.get(p['conn_key'], 0) for r in rows]
 
 # ── Generate HTML ─────────────────────────────────────────────────────────────
 
@@ -184,7 +187,14 @@ html = f'''<!DOCTYPE html>
     box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 20px;
   }}
   .card h2 {{ font-size: 14px; font-weight: 700; margin-bottom: 16px; color: #333; }}
-  .chart-wrap {{ position: relative; height: 260px; }}
+  .chart-sub {{ font-size: 11px; font-weight: 400; color: #aaa; }}
+  .chart-wrap {{ position: relative; height: 220px; }}
+  .charts-grid {{
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 16px; margin-bottom: 20px;
+  }}
+  @media(max-width:900px){{ .charts-grid{{ grid-template-columns: repeat(2,1fr); }} }}
+  @media(max-width:600px){{ .charts-grid{{ grid-template-columns: 1fr; }} }}
 
   .bottom {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }}
   @media(max-width:900px){{ .bottom{{ grid-template-columns:1fr; }} }}
@@ -215,11 +225,12 @@ html = f'''<!DOCTYPE html>
     {panel_cards_html}
   </div>
 
-  <div class="card">
-    <h2>Daily Connect Rate — All Calls</h2>
-    <div class="chart-wrap">
-      <canvas id="trendChart"></canvas>
-    </div>
+  <div class="charts-grid">
+    {''.join(f'''
+    <div class="card">
+      <h2>{p["title"]} <span class="chart-sub">— {p["subtitle"]}</span></h2>
+      <div class="chart-wrap"><canvas id="chart_{p['key']}"></canvas></div>
+    </div>''' for p in panels)}
   </div>
 
   <div class="bottom">
@@ -252,44 +263,61 @@ html = f'''<!DOCTYPE html>
 </div>
 
 <script>
-new Chart(document.getElementById('trendChart'), {{
-  type: 'line',
-  data: {{
-    labels: {json.dumps(trend_dates)},
-    datasets: [
-      {{
-        label: 'Connect Rate %',
-        data: {json.dumps(trend_rates)},
-        borderColor: '#1a73e8',
-        backgroundColor: 'rgba(26,115,232,.08)',
-        tension: .3, pointRadius: 4, fill: true, yAxisID: 'rate',
-      }},
-      {{
-        label: 'Total Calls',
-        data: {json.dumps(trend_totals)},
-        borderColor: '#ccc',
-        borderDash: [4,3],
-        tension: .3, pointRadius: 3, fill: false, yAxisID: 'vol',
-      }},
-    ]
-  }},
-  options: {{
-    responsive: true, maintainAspectRatio: false,
-    interaction: {{ mode: 'index', intersect: false }},
-    plugins: {{ legend: {{ position: 'top' }} }},
+function makeChart(id, labels, rates, totals) {{
+  new Chart(document.getElementById(id), {{
+    type: 'line',
+    data: {{
+      labels,
+      datasets: [
+        {{
+          label: 'Connect Rate %',
+          data: rates,
+          borderColor: '#1a73e8',
+          backgroundColor: 'rgba(26,115,232,.08)',
+          tension: .3, pointRadius: 3, fill: true, yAxisID: 'rate',
+        }},
+        {{
+          label: 'Total',
+          data: totals,
+          borderColor: '#ccc',
+          borderDash: [4,3],
+          tension: .3, pointRadius: 2, fill: false, yAxisID: 'vol',
+        }},
+      ]
+    }},
+    options: {{
+      responsive: true, maintainAspectRatio: false,
+      interaction: {{ mode: 'index', intersect: false }},
+      plugins: {{ legend: {{ position: 'top', labels: {{ boxWidth: 12, font: {{ size: 11 }} }} }} }},
     scales: {{
       rate: {{ type: 'linear', position: 'left',
                title: {{ display: true, text: 'Connect Rate %' }},
                ticks: {{ callback: v => v + '%' }}, suggestedMin: 0 }},
       vol:  {{ type: 'linear', position: 'right',
-               title: {{ display: true, text: 'Total Calls' }},
+               title: {{ display: false }},
                grid: {{ drawOnChartArea: false }} }},
     }}
   }}
-}});
+  }});
+}}
+
+CHART_CALLS_PLACEHOLDER
 </script>
 </body>
 </html>'''
+
+chart_calls_parts = []
+for p in panels:
+    chart_calls_parts.append(
+        "makeChart('chart_{}', {}, {}, {});".format(
+            p['key'],
+            json.dumps(p['trend_dates']),
+            json.dumps(p['trend_rates']),
+            json.dumps(p['trend_totals'])
+        )
+    )
+chart_calls = '\n'.join(chart_calls_parts)
+html = html.replace('CHART_CALLS_PLACEHOLDER', chart_calls)
 
 os.makedirs('docs', exist_ok=True)
 with open('docs/index.html', 'w', encoding='utf-8') as f:

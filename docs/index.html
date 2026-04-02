@@ -46,7 +46,14 @@
     box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 20px;
   }
   .card h2 { font-size: 14px; font-weight: 700; margin-bottom: 16px; color: #333; }
-  .chart-wrap { position: relative; height: 260px; }
+  .chart-sub { font-size: 11px; font-weight: 400; color: #aaa; }
+  .chart-wrap { position: relative; height: 220px; }
+  .charts-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 16px; margin-bottom: 20px;
+  }
+  @media(max-width:900px){ .charts-grid{ grid-template-columns: repeat(2,1fr); } }
+  @media(max-width:600px){ .charts-grid{ grid-template-columns: 1fr; } }
 
   .bottom { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
   @media(max-width:900px){ .bottom{ grid-template-columns:1fr; } }
@@ -68,7 +75,7 @@
 <div class="header">
   <h1>Connect Rate Dashboard</h1>
   <span class="badge">Router-Collection</span>
-  <span class="refreshed">Refreshed: 02 Apr 2026, 08:12 UTC</span>
+  <span class="refreshed">Refreshed: 02 Apr 2026, 09:02 UTC</span>
 </div>
 
 <div class="main">
@@ -131,10 +138,31 @@
     </div>
   </div>
 
-  <div class="card">
-    <h2>Daily Connect Rate — All Calls</h2>
-    <div class="chart-wrap">
-      <canvas id="trendChart"></canvas>
+  <div class="charts-grid">
+    
+    <div class="card">
+      <h2>ALL CALLS <span class="chart-sub">— Every attempt</span></h2>
+      <div class="chart-wrap"><canvas id="chart_all_calls"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>LATEST CALL <span class="chart-sub">— Last attempt per lead</span></h2>
+      <div class="chart-wrap"><canvas id="chart_latest_call"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>FIRST CALL <span class="chart-sub">— 1st attempt per lead</span></h2>
+      <div class="chart-wrap"><canvas id="chart_first_call"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>1ST CALL OF DAY <span class="chart-sub">— 1st attempt per lead per day</span></h2>
+      <div class="chart-wrap"><canvas id="chart_first_call_day"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>UNIQUE LEADS <span class="chart-sub">— 1st attempt · ever connected</span></h2>
+      <div class="chart-wrap"><canvas id="chart_unique_leads"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>1ST CALL OF DAY <span class="chart-sub">— Ever connected same day</span></h2>
+      <div class="chart-wrap"><canvas id="chart_first_day_conn"></canvas></div>
     </div>
   </div>
 
@@ -342,41 +370,50 @@
 </div>
 
 <script>
-new Chart(document.getElementById('trendChart'), {
-  type: 'line',
-  data: {
-    labels: ["2026-03-20", "2026-03-21", "2026-03-22", "2026-03-23", "2026-03-24", "2026-03-25", "2026-03-26", "2026-03-27", "2026-03-28", "2026-03-29", "2026-03-30", "2026-03-31", "2026-04-01"],
-    datasets: [
-      {
-        label: 'Connect Rate %',
-        data: [45.7, 39.6, 36.3, 27.8, 23.6, 30.9, 24.2, 36.1, 31.2, 33.6, 26.6, 28.3, 27.9],
-        borderColor: '#1a73e8',
-        backgroundColor: 'rgba(26,115,232,.08)',
-        tension: .3, pointRadius: 4, fill: true, yAxisID: 'rate',
-      },
-      {
-        label: 'Total Calls',
-        data: [46, 298, 361, 683, 571, 427, 562, 545, 513, 679, 685, 651, 624],
-        borderColor: '#ccc',
-        borderDash: [4,3],
-        tension: .3, pointRadius: 3, fill: false, yAxisID: 'vol',
-      },
-    ]
-  },
-  options: {
-    responsive: true, maintainAspectRatio: false,
-    interaction: { mode: 'index', intersect: false },
-    plugins: { legend: { position: 'top' } },
+function makeChart(id, labels, rates, totals) {
+  new Chart(document.getElementById(id), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Connect Rate %',
+          data: rates,
+          borderColor: '#1a73e8',
+          backgroundColor: 'rgba(26,115,232,.08)',
+          tension: .3, pointRadius: 3, fill: true, yAxisID: 'rate',
+        },
+        {
+          label: 'Total',
+          data: totals,
+          borderColor: '#ccc',
+          borderDash: [4,3],
+          tension: .3, pointRadius: 2, fill: false, yAxisID: 'vol',
+        },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
     scales: {
       rate: { type: 'linear', position: 'left',
                title: { display: true, text: 'Connect Rate %' },
                ticks: { callback: v => v + '%' }, suggestedMin: 0 },
       vol:  { type: 'linear', position: 'right',
-               title: { display: true, text: 'Total Calls' },
+               title: { display: false },
                grid: { drawOnChartArea: false } },
     }
   }
-});
+  });
+}
+
+makeChart('chart_all_calls', ["2026-03-20", "2026-03-21", "2026-03-22", "2026-03-23", "2026-03-24", "2026-03-25", "2026-03-26", "2026-03-27", "2026-03-28", "2026-03-29", "2026-03-30", "2026-03-31", "2026-04-01"], [45.7, 39.6, 36.3, 27.8, 23.6, 30.9, 24.2, 36.1, 31.2, 33.6, 26.6, 28.3, 27.9], [46, 298, 361, 683, 571, 427, 562, 545, 513, 679, 685, 651, 624]);
+makeChart('chart_latest_call', ["2026-03-20", "2026-03-21", "2026-03-22", "2026-03-23", "2026-03-24", "2026-03-25", "2026-03-26", "2026-03-27", "2026-03-28", "2026-03-29", "2026-03-30", "2026-03-31", "2026-04-01"], [50.0, 85.2, 94.4, 85.7, 45.3, 48.5, 53.6, 61.2, 75.8, 78.0, 57.1, 55.9, 39.7], [24, 61, 89, 105, 181, 130, 138, 170, 132, 186, 182, 195, 312]);
+makeChart('chart_first_call', ["2026-03-20", "2026-03-21", "2026-03-22", "2026-03-23", "2026-03-24", "2026-03-25", "2026-03-26", "2026-03-27", "2026-03-28", "2026-03-29", "2026-03-30", "2026-03-31", "2026-04-01"], [43.2, 43.8, 45.9, 47.3, 37.9, 43.9, 40.3, 54.2, 42.8, 52.6, 39.1, 40.6, 34.0], [37, 137, 148, 150, 132, 148, 129, 144, 173, 215, 169, 170, 153]);
+makeChart('chart_first_call_day', ["2026-03-20", "2026-03-21", "2026-03-22", "2026-03-23", "2026-03-24", "2026-03-25", "2026-03-26", "2026-03-27", "2026-03-28", "2026-03-29", "2026-03-30", "2026-03-31", "2026-04-01"], [43.2, 44.6, 42.9, 35.5, 26.3, 34.8, 33.2, 37.9, 38.7, 42.4, 32.2, 30.7, 28.8], [37, 148, 177, 276, 293, 230, 241, 261, 248, 342, 354, 339, 312]);
+makeChart('chart_unique_leads', ["2026-03-20", "2026-03-21", "2026-03-22", "2026-03-23", "2026-03-24", "2026-03-25", "2026-03-26", "2026-03-27", "2026-03-28", "2026-03-29", "2026-03-30", "2026-03-31", "2026-04-01"], [59.5, 73.0, 78.4, 72.0, 67.4, 62.2, 64.3, 79.2, 71.7, 77.7, 63.3, 65.9, 60.8], [37, 137, 148, 150, 132, 148, 129, 144, 173, 215, 169, 170, 153]);
+makeChart('chart_first_day_conn', ["2026-03-20", "2026-03-21", "2026-03-22", "2026-03-23", "2026-03-24", "2026-03-25", "2026-03-26", "2026-03-27", "2026-03-28", "2026-03-29", "2026-03-30", "2026-03-31", "2026-04-01"], [48.6, 60.1, 63.3, 52.5, 38.2, 45.7, 43.6, 56.7, 57.7, 56.4, 42.7, 44.8, 43.6], [37, 148, 177, 276, 293, 230, 241, 261, 248, 342, 354, 339, 312]);
 </script>
 </body>
 </html>
