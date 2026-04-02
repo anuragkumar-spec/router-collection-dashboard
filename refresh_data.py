@@ -323,6 +323,8 @@ html = f'''<!DOCTYPE html>
 </div>
 
 <script>
+const charts = {{}};
+
 function makeChart(id, labels, rates, totals) {{
   return new Chart(document.getElementById(id), {{
     type: 'line',
@@ -364,7 +366,6 @@ function makeChart(id, labels, rates, totals) {{
 CHART_CALLS_PLACEHOLDER
 
 const ALL_DATA = JS_DATASETS_PLACEHOLDER;
-const charts = {{}};
 
 function applyFilter() {{
   const dc = document.getElementById('dcFilter').value;
