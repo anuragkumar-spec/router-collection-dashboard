@@ -1,14 +1,16 @@
 """
-Run this locally whenever you want to refresh the dashboard data.
-  python refresh_data.py
-Reads METABASE_API_KEY from C:\\credentials\\.env, fetches all panels,
-writes static/data.json — no credentials leave your machine.
+Run locally:   python refresh_data.py
+  Reads METABASE_API_KEY from C:\\credentials\\.env
+
+In GitHub Actions the key is injected via METABASE_API_KEY env var — no .env needed.
 """
 import os, json, requests
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 
-load_dotenv('C:\\credentials\\.env')
+# local: load from C:\credentials\.env only if key not already in environment
+if not os.environ.get('METABASE_API_KEY'):
+    load_dotenv('C:\\credentials\\.env')
 
 MB_URL  = 'https://metabase.wiom.in'
 HEADERS = {'x-api-key': os.environ['METABASE_API_KEY'], 'Content-Type': 'application/json'}
