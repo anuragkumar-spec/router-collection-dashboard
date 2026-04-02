@@ -47,13 +47,19 @@ DISP_CLASSES = [
 ]
 
 
-def run_card(card_id, disposition_class=None):
+def run_card(card_id, disposition_class=None, agent_name=None):
     params = []
     if disposition_class:
         params.append({
             'type':   'string/=',
             'target': ['variable', ['template-tag', 'disposition_class']],
             'value':  disposition_class,
+        })
+    if agent_name:
+        params.append({
+            'type':   'string/=',
+            'target': ['variable', ['template-tag', 'agent_name']],
+            'value':  agent_name,
         })
     r = requests.post(f'{MB_URL}/api/card/{card_id}/query',
                       headers=HEADERS, json={'parameters': params}, timeout=30)
@@ -123,12 +129,42 @@ for dc, data in all_data.items():
     }
 
 # Default (All) for initial render
-panels    = build_panels(all_data['All'])
+all_default = all_data['All']
+panels    = build_panels(all_default)
 for p in panels:
     p['trend_dates']  = [str(r['Date'])[:10] for r in p['rows']]
     p['trend_rates']  = [r.get('Connect Rate %', 0) for r in p['rows']]
     p['trend_totals'] = [r.get('Total', 0) for r in p['rows']]
-agent_rows = all_data['All']['agent']
+agent_rows = all_default['agent']
+
+# Fetch per-agent data
+agents_list = ['All'] + sorted(set(r['Agent'] for r in agent_rows if r.get('Agent')))
+agent_data = {}
+for agent in agents_list:
+    if agent == 'All':
+        continue
+    print(f'  [Agent: {agent}]')
+    ag_dc = {}
+    for key, cid in CARD_IDS.items():
+        print(f'    {key}')
+        ag_dc[key] = run_card(cid, agent_name=agent)
+    agent_data[agent] = ag_dc
+
+# Build agent_datasets for JS
+agent_datasets = {}
+for agent, ag_dc in agent_data.items():
+    panels_ag = build_panels(ag_dc)
+    for p in panels_ag:
+        p['trend_dates']  = [str(r['Date'])[:10] for r in p['rows']]
+        p['trend_rates']  = [r.get('Connect Rate %', 0) for r in p['rows']]
+        p['trend_totals'] = [r.get('Total', 0) for r in p['rows']]
+    agent_datasets[agent] = {
+        'panels': [
+            {k: p[k] for k in ('key','total','conn','rate','conn_key','trend_dates','trend_rates','trend_totals')}
+            for p in panels_ag
+        ],
+        'agent': ag_dc['agent'],
+    }
 
 # ── Build trend data per panel ───────────────────────────────────────────────
 for p in panels:
@@ -179,7 +215,7 @@ for row in agent_rows:
 
 # Daily breakdown table rows (from all_calls)
 daily_rows_html = ''
-for row in data['all_calls']:
+for row in all_default['all_calls']:
     r = row.get('Connect Rate %', 0) or 0
     rc = rate_class(r)
     daily_rows_html += f'''
@@ -276,6 +312,18 @@ html = f'''<!DOCTYPE html>
       {''.join(f'<option value="{dc}">{dc}</option>' for dc in DISP_CLASSES)}
     </select>
   </div>
+  <div class="filter-wrap">
+    <label for="agentFilter">Agent</label>
+    <select id="agentFilter" onchange="applyFilter()">
+      {''.join(f'<option value="{a}">{a}</option>' for a in agents_list)}
+    </select>
+  </div>
+  <div class="filter-wrap">
+    <label>Date Range</label>
+    <input type="date" id="dateFrom" onchange="applyFilter()" style="background:#2a2a4a;color:#fff;border:1px solid #444;border-radius:6px;padding:5px 8px;font-size:12px;">
+    <span style="opacity:.5;font-size:11px;">to</span>
+    <input type="date" id="dateTo" onchange="applyFilter()" style="background:#2a2a4a;color:#fff;border:1px solid #444;border-radius:6px;padding:5px 8px;font-size:12px;">
+  </div>
   <span class="refreshed">Refreshed: {refreshed_at}</span>
 </div>
 
@@ -366,30 +414,48 @@ function makeChart(id, labels, rates, totals) {{
 CHART_CALLS_PLACEHOLDER
 
 const ALL_DATA = JS_DATASETS_PLACEHOLDER;
+const ALL_AGENT_DATA = AGENT_DATASETS_PLACEHOLDER;
 
 function applyFilter() {{
   const dc = document.getElementById('dcFilter').value;
-  const d = ALL_DATA[dc];
+  const agent = document.getElementById('agentFilter').value;
+  const dateFrom = document.getElementById('dateFrom').value;
+  const dateTo   = document.getElementById('dateTo').value;
+  const d = (agent !== 'All') ? ALL_AGENT_DATA[agent] : ALL_DATA[dc];
 
-  // Update metric panels
   d.panels.forEach(p => {{
+    // Filter by date range
+    let dates = p.trend_dates, rates = p.trend_rates, totals = p.trend_totals;
+    if (dateFrom || dateTo) {{
+      const idx = dates.map((dt, i) => (!dateFrom || dt >= dateFrom) && (!dateTo || dt <= dateTo) ? i : -1).filter(i => i >= 0);
+      dates  = idx.map(i => dates[i]);
+      rates  = idx.map(i => rates[i]);
+      totals = idx.map(i => totals[i]);
+    }}
+
+    // Recalculate aggregate from filtered daily data
+    const filtTotal = totals.reduce((a, b) => a + b, 0);
+    const filtConn  = totals.reduce((s, t, i) => s + Math.round(rates[i] * t / 100), 0);
+    const filtRate  = filtTotal ? Math.round(filtConn * 1000 / filtTotal) / 10 : 0;
+
+    // Update panel
     const el = document.getElementById('panel_' + p.key);
-    if (!el) return;
-    const rc = p.rate >= 40 ? 'rate-high' : p.rate >= 25 ? 'rate-mid' : 'rate-low';
-    el.querySelector('.panel-rate').className = 'panel-rate ' + rc;
-    el.querySelector('.panel-rate').textContent = p.rate + '%';
-    el.querySelector('.panel-total').textContent = p.total.toLocaleString();
-    el.querySelector('.panel-conn').textContent = p.conn.toLocaleString();
-  }});
+    if (el) {{
+      const rc = filtRate >= 40 ? 'rate-high' : filtRate >= 25 ? 'rate-mid' : 'rate-low';
+      el.querySelector('.panel-rate').className = 'panel-rate ' + rc;
+      el.querySelector('.panel-rate').textContent = filtRate + '%';
+      el.querySelector('.panel-total').textContent = filtTotal.toLocaleString();
+      el.querySelector('.panel-conn').textContent = filtConn.toLocaleString();
+    }}
 
-  // Update charts
-  d.panels.forEach(p => {{
+    // Update chart
     const c = charts[p.key];
-    if (!c) return;
-    c.data.labels = p.trend_dates;
-    c.data.datasets[0].data = p.trend_rates;
-    c.data.datasets[1].data = p.trend_totals;
-    c.update();
+    if (c) {{
+      c.data.labels = dates;
+      c.data.datasets[0].data = rates;
+      c.data.datasets[1].data = totals;
+      c.update();
+    }}
   }});
 
   // Update agent table
@@ -419,6 +485,7 @@ for p in panels:
 chart_calls = '\n'.join(chart_calls_parts)
 html = html.replace('CHART_CALLS_PLACEHOLDER', chart_calls)
 html = html.replace('JS_DATASETS_PLACEHOLDER', json.dumps(js_datasets))
+html = html.replace('AGENT_DATASETS_PLACEHOLDER', json.dumps(agent_datasets))
 
 os.makedirs('docs', exist_ok=True)
 with open('docs/index.html', 'w', encoding='utf-8') as f:
