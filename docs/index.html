@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connect Rate Dashboard — Router-Collection</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #f0f2f5; color: #222; }
+
+  .header {
+    background: #1a1a2e; color: #fff;
+    padding: 18px 28px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  .header h1 { font-size: 18px; font-weight: 700; flex: 1; }
+  .badge { background: #e94560; color: #fff; font-size: 11px; padding: 3px 10px; border-radius: 12px; font-weight: 600; }
+  .refreshed { font-size: 11px; opacity: .6; margin-left: auto; }
+
+  .main { padding: 20px 28px; max-width: 1600px; margin: 0 auto; }
+
+  .panels {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px; margin-bottom: 20px;
+  }
+  @media(max-width:1100px){ .panels{ grid-template-columns: repeat(3,1fr); } }
+  @media(max-width:650px){ .panels{ grid-template-columns: repeat(2,1fr); } }
+
+  .panel {
+    background: #fff; border-radius: 10px; padding: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  }
+  .panel-title  { font-size: 10px; font-weight: 700; letter-spacing: .8px; color: #888; text-transform: uppercase; }
+  .panel-subtitle { font-size: 10px; color: #bbb; margin-top: 2px; margin-bottom: 8px; }
+  .panel-rate   { font-size: 30px; font-weight: 700; line-height: 1; margin-bottom: 6px; }
+  .panel-meta   { display: flex; gap: 14px; font-size: 12px; color: #666; }
+  .panel-meta strong { color: #222; }
+
+  .rate-high { color: #1e8a44; }
+  .rate-mid  { color: #f57c00; }
+  .rate-low  { color: #c62828; }
+
+  .card {
+    background: #fff; border-radius: 10px; padding: 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 20px;
+  }
+  .card h2 { font-size: 14px; font-weight: 700; margin-bottom: 16px; color: #333; }
+  .chart-wrap { position: relative; height: 260px; }
+
+  .bottom { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  @media(max-width:900px){ .bottom{ grid-template-columns:1fr; } }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; padding: 8px 12px;
+    background: #f7f8fa; color: #555; font-weight: 600;
+    border-bottom: 2px solid #e8eaed; font-size: 11px; text-transform: uppercase;
+  }
+  td { padding: 9px 12px; border-bottom: 1px solid #f0f0f0; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafbfc; }
+  .sub { font-size: 10px; color: #aaa; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Connect Rate Dashboard</h1>
+  <span class="badge">Router-Collection</span>
+  <span class="refreshed">Refreshed: 02 Apr 2026, 07:34 UTC</span>
+</div>
+
+<div class="main">
+
+  <div class="panels">
+    
+    <div class="panel">
+      <div class="panel-title">ALL CALLS</div>
+      <div class="panel-subtitle">Every attempt</div>
+      <div class="panel-rate rate-mid">29.9%</div>
+      <div class="panel-meta">
+        <span><strong>6,645</strong> Total</span>
+        <span><strong>1,988</strong> Connected</span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">LATEST CALL</div>
+      <div class="panel-subtitle">Last attempt per lead</div>
+      <div class="panel-rate rate-high">60.0%</div>
+      <div class="panel-meta">
+        <span><strong>1,905</strong> Total</span>
+        <span><strong>1,143</strong> Connected</span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">FIRST CALL</div>
+      <div class="panel-subtitle">1st attempt per lead</div>
+      <div class="panel-rate rate-high">43.8%</div>
+      <div class="panel-meta">
+        <span><strong>1,905</strong> Total</span>
+        <span><strong>834</strong> Connected</span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">1ST CALL OF DAY</div>
+      <div class="panel-subtitle">1st attempt per lead per day</div>
+      <div class="panel-rate rate-mid">35.0%</div>
+      <div class="panel-meta">
+        <span><strong>3,258</strong> Total</span>
+        <span><strong>1,141</strong> Connected</span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">UNIQUE LEADS</div>
+      <div class="panel-subtitle">1st attempt · ever connected</div>
+      <div class="panel-rate rate-high">69.7%</div>
+      <div class="panel-meta">
+        <span><strong>1,905</strong> Total</span>
+        <span><strong>1,327</strong> Ever Connected</span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">1ST CALL OF DAY</div>
+      <div class="panel-subtitle">Ever connected same day</div>
+      <div class="panel-rate rate-high">49.4%</div>
+      <div class="panel-meta">
+        <span><strong>3,258</strong> Total</span>
+        <span><strong>1,609</strong> Connected Same Day</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Daily Connect Rate — All Calls</h2>
+    <div class="chart-wrap">
+      <canvas id="trendChart"></canvas>
+    </div>
+  </div>
+
+  <div class="bottom">
+
+    <div class="card">
+      <h2>Summary by View</h2>
+      <table>
+        <thead><tr><th>Lens</th><th>Total</th><th>Connected</th><th>Rate %</th></tr></thead>
+        <tbody>
+      <tr>
+        <td>ALL CALLS<br><span class="sub">Every attempt</span></td>
+        <td>6,645</td>
+        <td>1,988</td>
+        <td class="rate-mid">29.9%</td>
+      </tr>
+      <tr>
+        <td>LATEST CALL<br><span class="sub">Last attempt per lead</span></td>
+        <td>1,905</td>
+        <td>1,143</td>
+        <td class="rate-high">60.0%</td>
+      </tr>
+      <tr>
+        <td>FIRST CALL<br><span class="sub">1st attempt per lead</span></td>
+        <td>1,905</td>
+        <td>834</td>
+        <td class="rate-high">43.8%</td>
+      </tr>
+      <tr>
+        <td>1ST CALL OF DAY<br><span class="sub">1st attempt per lead per day</span></td>
+        <td>3,258</td>
+        <td>1,141</td>
+        <td class="rate-mid">35.0%</td>
+      </tr>
+      <tr>
+        <td>UNIQUE LEADS<br><span class="sub">1st attempt · ever connected</span></td>
+        <td>1,905</td>
+        <td>1,327</td>
+        <td class="rate-high">69.7%</td>
+      </tr>
+      <tr>
+        <td>1ST CALL OF DAY<br><span class="sub">Ever connected same day</span></td>
+        <td>3,258</td>
+        <td>1,609</td>
+        <td class="rate-high">49.4%</td>
+      </tr></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Daily Breakdown</h2>
+      <table>
+        <thead><tr><th>Date</th><th>Total</th><th>Connected</th><th>Rate %</th></tr></thead>
+        <tbody>
+      <tr>
+        <td>2026-03-20T00:00:00+05:30</td>
+        <td>46</td>
+        <td>21</td>
+        <td class="rate-high">45.7%</td>
+      </tr>
+      <tr>
+        <td>2026-03-21T00:00:00+05:30</td>
+        <td>298</td>
+        <td>118</td>
+        <td class="rate-mid">39.6%</td>
+      </tr>
+      <tr>
+        <td>2026-03-22T00:00:00+05:30</td>
+        <td>361</td>
+        <td>131</td>
+        <td class="rate-mid">36.3%</td>
+      </tr>
+      <tr>
+        <td>2026-03-23T00:00:00+05:30</td>
+        <td>683</td>
+        <td>190</td>
+        <td class="rate-mid">27.8%</td>
+      </tr>
+      <tr>
+        <td>2026-03-24T00:00:00+05:30</td>
+        <td>571</td>
+        <td>135</td>
+        <td class="rate-low">23.6%</td>
+      </tr>
+      <tr>
+        <td>2026-03-25T00:00:00+05:30</td>
+        <td>427</td>
+        <td>132</td>
+        <td class="rate-mid">30.9%</td>
+      </tr>
+      <tr>
+        <td>2026-03-26T00:00:00+05:30</td>
+        <td>562</td>
+        <td>136</td>
+        <td class="rate-low">24.2%</td>
+      </tr>
+      <tr>
+        <td>2026-03-27T00:00:00+05:30</td>
+        <td>545</td>
+        <td>197</td>
+        <td class="rate-mid">36.1%</td>
+      </tr>
+      <tr>
+        <td>2026-03-28T00:00:00+05:30</td>
+        <td>513</td>
+        <td>160</td>
+        <td class="rate-mid">31.2%</td>
+      </tr>
+      <tr>
+        <td>2026-03-29T00:00:00+05:30</td>
+        <td>679</td>
+        <td>228</td>
+        <td class="rate-mid">33.6%</td>
+      </tr>
+      <tr>
+        <td>2026-03-30T00:00:00+05:30</td>
+        <td>685</td>
+        <td>182</td>
+        <td class="rate-mid">26.6%</td>
+      </tr>
+      <tr>
+        <td>2026-03-31T00:00:00+05:30</td>
+        <td>651</td>
+        <td>184</td>
+        <td class="rate-mid">28.3%</td>
+      </tr>
+      <tr>
+        <td>2026-04-01T00:00:00+05:30</td>
+        <td>624</td>
+        <td>174</td>
+        <td class="rate-mid">27.9%</td>
+      </tr></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Agent Breakdown</h2>
+      <table>
+        <thead><tr><th>Agent</th><th>Total</th><th>Connected</th><th>Rate %</th></tr></thead>
+        <tbody>
+      <tr>
+        <td>Neha S Stefto</td>
+        <td>1,886</td>
+        <td>597</td>
+        <td class="rate-mid">31.7%</td>
+      </tr>
+      <tr>
+        <td>Suraj Stefto</td>
+        <td>1,535</td>
+        <td>473</td>
+        <td class="rate-mid">30.8%</td>
+      </tr>
+      <tr>
+        <td>Abhishek Stefto</td>
+        <td>1,476</td>
+        <td>458</td>
+        <td class="rate-mid">31.0%</td>
+      </tr>
+      <tr>
+        <td>Aman Stefto</td>
+        <td>783</td>
+        <td>189</td>
+        <td class="rate-low">24.1%</td>
+      </tr>
+      <tr>
+        <td>Aman Stefto </td>
+        <td>521</td>
+        <td>122</td>
+        <td class="rate-low">23.4%</td>
+      </tr>
+      <tr>
+        <td>Aman Wiom</td>
+        <td>248</td>
+        <td>106</td>
+        <td class="rate-high">42.7%</td>
+      </tr>
+      <tr>
+        <td>Jyoti Stefto</td>
+        <td>181</td>
+        <td>42</td>
+        <td class="rate-low">23.2%</td>
+      </tr>
+      <tr>
+        <td>Deepakshi Agarwal</td>
+        <td>9</td>
+        <td>1</td>
+        <td class="rate-low">11.1%</td>
+      </tr>
+      <tr>
+        <td>Aman@stefto.in</td>
+        <td>5</td>
+        <td>0</td>
+        <td class="rate-low">0%</td>
+      </tr>
+      <tr>
+        <td>Aaman.stefto.in</td>
+        <td>1</td>
+        <td>0</td>
+        <td class="rate-low">0%</td>
+      </tr></tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<script>
+new Chart(document.getElementById('trendChart'), {
+  type: 'line',
+  data: {
+    labels: ["2026-03-20T00:00:00+05:30", "2026-03-21T00:00:00+05:30", "2026-03-22T00:00:00+05:30", "2026-03-23T00:00:00+05:30", "2026-03-24T00:00:00+05:30", "2026-03-25T00:00:00+05:30", "2026-03-26T00:00:00+05:30", "2026-03-27T00:00:00+05:30", "2026-03-28T00:00:00+05:30", "2026-03-29T00:00:00+05:30", "2026-03-30T00:00:00+05:30", "2026-03-31T00:00:00+05:30", "2026-04-01T00:00:00+05:30"],
+    datasets: [
+      {
+        label: 'Connect Rate %',
+        data: [45.7, 39.6, 36.3, 27.8, 23.6, 30.9, 24.2, 36.1, 31.2, 33.6, 26.6, 28.3, 27.9],
+        borderColor: '#1a73e8',
+        backgroundColor: 'rgba(26,115,232,.08)',
+        tension: .3, pointRadius: 4, fill: true, yAxisID: 'rate',
+      },
+      {
+        label: 'Total Calls',
+        data: [46, 298, 361, 683, 571, 427, 562, 545, 513, 679, 685, 651, 624],
+        borderColor: '#ccc',
+        borderDash: [4,3],
+        tension: .3, pointRadius: 3, fill: false, yAxisID: 'vol',
+      },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { position: 'top' } },
+    scales: {
+      rate: { type: 'linear', position: 'left',
+               title: { display: true, text: 'Connect Rate %' },
+               ticks: { callback: v => v + '%' }, suggestedMin: 0 },
+      vol:  { type: 'linear', position: 'right',
+               title: { display: true, text: 'Total Calls' },
+               grid: { drawOnChartArea: false } },
+    }
+  }
+});
+</script>
+</body>
+</html>
