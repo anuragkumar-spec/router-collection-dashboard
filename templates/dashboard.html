@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connect Rate Dashboard — Router-Collection</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #f0f2f5; color: #222; }
+
+  /* ── Header ── */
+  .header {
+    background: #1a1a2e; color: #fff;
+    padding: 18px 28px; display: flex; align-items: center; gap: 16px;
+    flex-wrap: wrap;
+  }
+  .header h1 { font-size: 18px; font-weight: 700; letter-spacing: .5px; flex: 1; }
+  .header .badge {
+    background: #e94560; color: #fff; font-size: 11px;
+    padding: 3px 10px; border-radius: 12px; font-weight: 600;
+  }
+
+  /* ── Filters ── */
+  .filters {
+    background: #fff; border-bottom: 1px solid #dde1e7;
+    padding: 12px 28px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+  }
+  .filters label { font-size: 12px; font-weight: 600; color: #555; }
+  .filters input, .filters select {
+    border: 1px solid #ccc; border-radius: 6px;
+    padding: 6px 10px; font-size: 13px; outline: none;
+  }
+  .filters input:focus, .filters select:focus { border-color: #1a73e8; }
+  .filters button {
+    background: #1a73e8; color: #fff; border: none; border-radius: 6px;
+    padding: 7px 18px; font-size: 13px; cursor: pointer; font-weight: 600;
+  }
+  .filters button:hover { background: #1558b0; }
+  .filters .clear {
+    background: transparent; color: #555; border: 1px solid #ccc;
+  }
+  .filters .clear:hover { background: #f5f5f5; }
+
+  /* ── Main layout ── */
+  .main { padding: 20px 28px; max-width: 1600px; margin: 0 auto; }
+
+  /* ── Panel grid ── */
+  .panels {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  @media (max-width: 1200px) { .panels { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 700px)  { .panels { grid-template-columns: repeat(2, 1fr); } }
+
+  .panel {
+    background: #fff; border-radius: 10px; padding: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .panel-title { font-size: 10px; font-weight: 700; letter-spacing: .8px; color: #888; text-transform: uppercase; }
+  .panel-subtitle { font-size: 10px; color: #aaa; margin-top: -4px; }
+  .panel-rate {
+    font-size: 32px; font-weight: 700; color: #1a73e8; line-height: 1;
+  }
+  .panel-meta { display: flex; gap: 16px; font-size: 12px; color: #555; }
+  .panel-meta span strong { color: #222; }
+
+  /* ── Trend chart ── */
+  .trend-card {
+    background: #fff; border-radius: 10px; padding: 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 20px;
+  }
+  .trend-card h2 { font-size: 14px; font-weight: 700; margin-bottom: 16px; color: #333; }
+  .chart-wrap { position: relative; height: 260px; }
+
+  /* ── Bottom row ── */
+  .bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .bottom { grid-template-columns: 1fr; } }
+
+  /* ── Table card ── */
+  .table-card {
+    background: #fff; border-radius: 10px; padding: 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08); overflow-x: auto;
+  }
+  .table-card h2 { font-size: 14px; font-weight: 700; margin-bottom: 14px; color: #333; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; padding: 8px 12px;
+    background: #f7f8fa; color: #555; font-weight: 600;
+    border-bottom: 2px solid #e8eaed; font-size: 11px; text-transform: uppercase;
+  }
+  td { padding: 9px 12px; border-bottom: 1px solid #f0f0f0; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafbfc; }
+
+  /* rate colouring */
+  .rate-high  { color: #1e8a44; font-weight: 700; }
+  .rate-mid   { color: #f57c00; font-weight: 700; }
+  .rate-low   { color: #c62828; font-weight: 700; }
+
+  /* ── Detail panel tables ── */
+  .detail-panel { display: none; }
+  .panel.active .detail-panel { display: block; }
+  .panel-detail-toggle { font-size: 10px; color: #1a73e8; cursor: pointer; margin-top: 4px; user-select: none; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Connect Rate Dashboard</h1>
+  <span class="badge">Router-Collection</span>
+  {% if call_date %}<span style="font-size:13px;opacity:.7">{{ call_date }}</span>{% endif %}
+</div>
+
+<!-- Filters -->
+<form class="filters" method="get">
+  <label>Date</label>
+  <input type="date" name="date" value="{{ call_date }}"
+         min="2026-03-20" max="2026-12-31">
+  <label>Agent</label>
+  <select name="agent">
+    <option value="">All Agents</option>
+    {% for row in agent_rows %}
+    <option value="{{ row.Agent }}" {% if agent == row.Agent %}selected{% endif %}>
+      {{ row.Agent }}
+    </option>
+    {% endfor %}
+  </select>
+  <button type="submit">Apply</button>
+  <a href="/"><button type="button" class="clear">Clear</button></a>
+</form>
+
+<div class="main">
+
+  <!-- 6 metric panels -->
+  <div class="panels">
+    {% for p in panels %}
+    <div class="panel">
+      <div class="panel-title">{{ p.title }}</div>
+      <div class="panel-subtitle">{{ p.subtitle }}</div>
+      <div class="panel-rate">{{ p.rate }}%</div>
+      <div class="panel-meta">
+        <span><strong>{{ p.total }}</strong> Total</span>
+        <span><strong>{{ p.conn }}</strong> {{ p.conn_key }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Trend chart -->
+  {% if not call_date %}
+  <div class="trend-card">
+    <h2>Daily Connect Rate — All Calls</h2>
+    <div class="chart-wrap">
+      <canvas id="trendChart"></canvas>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Bottom: panel breakdown + agent table -->
+  <div class="bottom">
+
+    <!-- Panel-by-panel breakdown table -->
+    <div class="table-card">
+      <h2>Summary by View</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Lens</th><th>Total</th><th>Connected</th><th>Rate %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in panels %}
+          {% set r = p.rate %}
+          <tr>
+            <td>{{ p.title }}<br><span style="font-size:10px;color:#aaa">{{ p.subtitle }}</span></td>
+            <td>{{ p.total }}</td>
+            <td>{{ p.conn }}</td>
+            <td class="{% if r >= 40 %}rate-high{% elif r >= 25 %}rate-mid{% else %}rate-low{% endif %}">
+              {{ r }}%
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Agent breakdown -->
+    <div class="table-card">
+      <h2>Agent Breakdown</h2>
+      <table>
+        <thead>
+          <tr><th>Agent</th><th>Total</th><th>Connected</th><th>Rate %</th></tr>
+        </thead>
+        <tbody>
+          {% for row in agent_rows %}
+          {% set r = row['Connect Rate %'] %}
+          <tr>
+            <td>{{ row.Agent }}</td>
+            <td>{{ row.Total }}</td>
+            <td>{{ row.Connected }}</td>
+            <td class="{% if r >= 40 %}rate-high{% elif r >= 25 %}rate-mid{% else %}rate-low{% endif %}">
+              {{ r }}%
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+{% if not call_date %}
+<script>
+const labels = {{ panels[0].rows | map(attribute='Date') | list | tojson }};
+const rates  = {{ panels[0].rows | map(attribute='Connect Rate %') | list | tojson }};
+const totals = {{ panels[0].rows | map(attribute='Total') | list | tojson }};
+const conns  = {{ panels[0].rows | map(attribute='Connected') | list | tojson }};
+
+new Chart(document.getElementById('trendChart'), {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [
+      {
+        label: 'Connect Rate %',
+        data: rates,
+        borderColor: '#1a73e8',
+        backgroundColor: 'rgba(26,115,232,.08)',
+        tension: .3, pointRadius: 4, fill: true, yAxisID: 'rate',
+      },
+      {
+        label: 'Total Calls',
+        data: totals,
+        borderColor: '#aaa',
+        borderDash: [4,3],
+        tension: .3, pointRadius: 3, fill: false, yAxisID: 'vol',
+      },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { position: 'top', labels: { font: { size: 12 } } } },
+    scales: {
+      rate: {
+        type: 'linear', position: 'left',
+        title: { display: true, text: 'Connect Rate %' },
+        ticks: { callback: v => v + '%' },
+        suggestedMin: 0,
+      },
+      vol: {
+        type: 'linear', position: 'right',
+        title: { display: true, text: 'Total Calls' },
+        grid: { drawOnChartArea: false },
+      },
+    }
+  }
+});
+</script>
+{% endif %}
+
+</body>
+</html>
