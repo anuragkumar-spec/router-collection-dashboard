@@ -11,7 +11,7 @@ GITHUB_RAW = (
 )
 
 _cache = {"html": None, "ts": 0}
-CACHE_TTL = 3600  # 1 hour
+CACHE_TTL = 300  # 5 minutes
 
 
 @app.route('/')
